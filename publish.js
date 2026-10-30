@@ -13,7 +13,7 @@ function arg(name) {
 const text = arg('text') || process.env.POST_TEXT;
 const imagePath = arg('image') || process.env.POST_IMAGE;
 const token = process.env.LINKEDIN_ACCESS_TOKEN;
-const orgId = process.env.LINKEDIN_ORG_ID || '140754014';
+const orgId = process.env.LINKEDIN_ORG_ID; // only set if token has w_organization_social scope
 
 if (!token) { console.error('Missing LINKEDIN_ACCESS_TOKEN'); process.exit(1); }
 if (!text) { console.error('Missing post text (--text or POST_TEXT)'); process.exit(1); }
@@ -21,13 +21,20 @@ if (!text) { console.error('Missing post text (--text or POST_TEXT)'); process.e
 const API = 'https://api.linkedin.com/v2';
 
 async function registerUpload() {
+  let owner;
+  if (orgId) {
+    owner = `urn:li:organization:${orgId}`;
+  } else {
+    const pid = await getPersonId();
+    owner = `urn:li:person:${pid}`;
+  }
   const r = await fetch(`${API}/assets?action=registerUpload`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'X-Restli-Protocol-Version': '2.0.0' },
     body: JSON.stringify({
       registerUploadRequest: {
         recipes: ['urn:li:digitalmediaRecipe:feedshare-image'],
-        owner: `urn:li:organization:${orgId}`,
+        owner,
         serviceRelationships: [{ relationshipType: 'OWNER', identifier: 'urn:li:userGeneratedContent' }]
       }
     })
@@ -47,9 +54,26 @@ async function uploadImage(uploadUrl, filePath) {
   if (!r.ok) throw new Error('upload failed: ' + r.status + ' ' + (await r.text()));
 }
 
+async function getPersonId() {
+  const r = await fetch(`${API}/userinfo`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error('userinfo: ' + JSON.stringify(j));
+  return j.sub;
+}
+
 async function createPost(assetUrn) {
+  let author;
+  if (orgId) {
+    author = `urn:li:organization:${orgId}`;
+  } else {
+    const pid = await getPersonId();
+    author = `urn:li:person:${pid}`;
+    console.log('Posting as person:', author);
+  }
   const body = {
-    author: `urn:li:organization:${orgId}`,
+    author,
     lifecycleState: 'PUBLISHED',
     specificContent: {
       'com.linkedin.ugc.ShareContent': {
