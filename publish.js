@@ -67,6 +67,7 @@ async function createPost(assetUrn) {
   let author;
   if (orgId) {
     author = `urn:li:organization:${orgId}`;
+    console.log('Trying org post:', author);
   } else {
     const pid = await getPersonId();
     author = `urn:li:person:${pid}`;
